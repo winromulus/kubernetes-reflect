@@ -419,7 +419,8 @@ public abstract class ResourceMirror<TResource> :
         {
             source = sourceResource;
         }
-
+        
+        var sourceProperties = source.GetReflectionProperties();
 
         var patchAnnotations = new Dictionary<string, string>
         {
@@ -448,6 +449,17 @@ public abstract class ResourceMirror<TResource> :
                 newResourceAnnotations[Annotations.Reflection.MetaReflectedAt] =
                     JsonConvert.SerializeObject(DateTimeOffset.UtcNow);
 
+                if (sourceProperties.Labels)
+                {
+                    newResource.Metadata.Labels ??= new Dictionary<string, string>();
+                    var newResourceLabels = newResource.Metadata.Labels;
+                    foreach (var label in source.Metadata.Labels)
+                    {
+                        if (sourceProperties.CanLabelBeReflected(label.Key))
+                            newResourceLabels[label.Key] = label.Value;
+                    }
+                }
+
                 try
                 {
                     await OnResourceCreate(newResource, targetId.Namespace);
@@ -475,6 +487,19 @@ public abstract class ResourceMirror<TResource> :
             foreach (var patchAnnotation in patchAnnotations)
                 annotations[patchAnnotation.Key] = patchAnnotation.Value;
             patchDoc.Replace(e => e.Metadata.Annotations, annotations);
+
+            if (sourceProperties.Labels && source.Metadata.Labels != null)
+            {
+                var labels = new Dictionary<string, string>();
+                if (targetResource.Metadata.Labels != null)
+                    labels = new Dictionary<string, string>(targetResource.Metadata.Labels);
+                foreach (var label in source.Metadata.Labels)
+                {
+                    if (sourceProperties.CanLabelBeReflected(label.Key))
+                        labels[label.Key] = label.Value;
+                }
+                patchDoc.Replace(e => e.Metadata.Labels, labels);
+            }
 
             await OnResourceConfigurePatch(source, patchDoc);
 
